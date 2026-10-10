@@ -1,10 +1,13 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Relative base path ensures the app works on GitHub Pages (https://<username>.github.io/<repo>/)
+    // as well as custom domains, Vercel, Netlify, and Cloud Run without 404 blank screen errors!
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

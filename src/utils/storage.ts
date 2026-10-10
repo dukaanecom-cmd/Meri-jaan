@@ -3,10 +3,10 @@ import { BirthdayData, initialBirthdayData } from '../data/birthdayData';
 const LOCAL_STORAGE_KEY = 'janamdin_birthday_celebration_data_v1';
 
 /**
- * Loads birthday data using multi-layer persistence:
- * 1. URL encoded payload (?data=...) for direct shareable links
- * 2. Server API (/api/birthday-data) saved to server disk
- * 3. Browser localStorage backup
+ * Loads birthday data safely across GitHub Pages, static hosting, and full-stack servers:
+ * 1. URL encoded payload (?bday=...) for direct shareable links
+ * 2. Browser localStorage (instant, 100% works on GitHub Pages without server)
+ * 3. Server API (/api/birthday-data) if backend server is running
  * 4. Fallback to initialBirthdayData
  */
 export async function loadPersistedBirthdayData(): Promise<BirthdayData> {
@@ -25,22 +25,7 @@ export async function loadPersistedBirthdayData(): Promise<BirthdayData> {
     console.warn('Could not parse URL data parameter:', err);
   }
 
-  // Layer 2: Check server disk storage
-  try {
-    const res = await fetch('/api/birthday-data');
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && json.data && json.data.partnerName) {
-        // Also sync to local storage
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.data));
-        return { ...initialBirthdayData, ...json.data };
-      }
-    }
-  } catch (err) {
-    console.warn('Could not load from server API, checking local storage:', err);
-  }
-
-  // Layer 3: LocalStorage
+  // Layer 2: LocalStorage (Works 100% on GitHub Pages, Netlify, Vercel)
   try {
     const local = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (local) {
@@ -53,25 +38,41 @@ export async function loadPersistedBirthdayData(): Promise<BirthdayData> {
     console.warn('Could not load from localStorage:', err);
   }
 
+  // Layer 3: Check server disk storage (if running in full-stack Node environment)
+  try {
+    const res = await fetch('/api/birthday-data');
+    const contentType = res.headers.get('content-type');
+    if (res.ok && contentType && contentType.includes('application/json')) {
+      const json = await res.json();
+      if (json.success && json.data && json.data.partnerName) {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(json.data));
+        return { ...initialBirthdayData, ...json.data };
+      }
+    }
+  } catch (err) {
+    // Expected on static hosts like GitHub Pages, seamlessly fallback to default
+  }
+
   return initialBirthdayData;
 }
 
 /**
  * Persists birthday data permanently:
- * 1. Saves to Server Disk (/api/birthday-data)
- * 2. Saves to localStorage
+ * 1. Saves to localStorage (instant persistence on GitHub Pages)
+ * 2. Saves to Server Disk (/api/birthday-data) if server is available
  */
 export async function savePersistedBirthdayData(data: BirthdayData): Promise<boolean> {
-  let serverSaved = false;
+  let savedLocally = false;
 
   // 1. Save to LocalStorage immediately
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    savedLocally = true;
   } catch (err) {
     console.warn('Failed saving to localStorage:', err);
   }
 
-  // 2. Save to Server Disk
+  // 2. Try saving to Server Disk if full-stack backend exists
   try {
     const res = await fetch('/api/birthday-data', {
       method: 'POST',
@@ -80,18 +81,19 @@ export async function savePersistedBirthdayData(data: BirthdayData): Promise<boo
     });
     if (res.ok) {
       const json = await res.json();
-      serverSaved = json.success;
+      return json.success || savedLocally;
     }
   } catch (err) {
-    console.warn('Failed saving to server:', err);
+    // Static host (GitHub Pages) uses localStorage, which is already saved
   }
 
-  return serverSaved;
+  return savedLocally;
 }
 
 /**
- * Uploads an image permanently to the server file system:
- * Returns the public URL (e.g., /uploads/photo_1_172856.jpg)
+ * Uploads an image permanently:
+ * On server: saves file to disk (/uploads/...)
+ * On static GitHub Pages: uses optimized Data URL in localStorage
  */
 export async function uploadPhotoFilePermanently(photoId: number, dataUrl: string): Promise<string> {
   try {
@@ -100,14 +102,15 @@ export async function uploadPhotoFilePermanently(photoId: number, dataUrl: strin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ photoId, dataUrl }),
     });
-    if (res.ok) {
+    const contentType = res.headers.get('content-type');
+    if (res.ok && contentType && contentType.includes('application/json')) {
       const json = await res.json();
       if (json.success && json.url) {
         return json.url;
       }
     }
   } catch (err) {
-    console.warn('Upload API failed, falling back to base64 dataUrl:', err);
+    // Static host fallback: dataUrl in localStorage
   }
   return dataUrl;
 }
@@ -126,7 +129,6 @@ export function generateShareableLink(data: BirthdayData): string {
       heroSubtext: data.heroSubtext,
       letterParagraphs: data.letterParagraphs,
       secretWishText: data.secretWishText,
-      // include photos with URLs
       photos: data.photos.map(p => ({
         id: p.id,
         title: p.title,
