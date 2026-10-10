@@ -1,0 +1,6 @@
+{
+  "name": "Romantic Birthday Celebration - Janamdin Mubarak",
+  "description": "A heartfelt, romantic and responsive birthday surprise website with music player, memory gallery, secret surprise modal and floating hearts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
